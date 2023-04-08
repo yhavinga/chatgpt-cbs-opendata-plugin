@@ -4,7 +4,7 @@ version = "0.1.0"
 description = ""
 authors = ["Yeb Havinga <yhavinga@gmail.com>"]
 readme = "README.md"
-packages = [{include = "chatgpt_cbs_opendata_plugin"}]
+packages = [{include = "server"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
@@ -20,7 +20,13 @@ tenacity = "^8.2.2"
 backoff = "^2.2.1"
 pytest-asyncio = "^0.21.0"
 httpx = "^0.23.3"
+uvicorn = "^0.21.1"
+python-dotenv = "^1.0.0"
+safety = "^2.3.5"
+faiss-cpu = "^1.7.3"
 
+[tool.poetry.scripts]
+start = "server.main:start"
 
 [build-system]
 requires = ["poetry-core"]
