@@ -1,0 +1,22 @@
+{
+  "schema_version": "v1",
+  "name_for_model": "cbs_opendata",
+  "name_for_human": "CBS Opendata Plugin",
+  "description_for_model": "Plugin for searching through the Netherlands CBS Opendata datasets based on natural language queries. Use it whenever a user asks something that could be answered with the datasets released by the Dutch government.",
+  "description_for_human": "Search through CBS Opendata datasets.",
+  "auth": {
+    "type": "service_http",
+    "authorization_type": "bearer",
+     "verification_tokens": {
+       "openai": "519f183e5f294615b8ee706db6b6f0bf"
+    }
+  },
+  "api": {
+    "type": "openapi",
+    "url": "https://chatdata.nl/.well-known/openapi.yaml",
+    "has_user_authentication": false
+  },
+  "logo_url": "https://cdn.cbs.nl/icons/navigation/cbs-logo-brand-nl.svg",
+  "contact_email": "yhavinga@gmail.com",
+  "legal_info_url": "https://www.cbs.nl/nl-nl/onze-diensten/open-data"
+}

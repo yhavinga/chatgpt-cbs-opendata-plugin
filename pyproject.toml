@@ -24,6 +24,7 @@ uvicorn = "^0.21.1"
 python-dotenv = "^1.0.0"
 safety = "^2.3.5"
 faiss-cpu = "^1.7.3"
+duckdb = "^0.7.1"
 
 [tool.poetry.scripts]
 start = "server.main:start"

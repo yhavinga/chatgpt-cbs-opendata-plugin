@@ -32,7 +32,7 @@ sub_app = FastAPI(
     title="CBS Opendata Plugin API",
     description="An API for querying CBS Opendata based on natural language queries",
     version="1.0.0",
-    servers=[{"url": "https://your-app-url.com"}],
+    servers=[{"url": "https://chatdata.nl"}],
     dependencies=[Depends(validate_token)],
 )
 app.mount("/sub", sub_app)
@@ -83,4 +83,4 @@ async def filtered_table_list(
 
 
 def start():
-    uvicorn.run("server.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("server.main:app", host="0.0.0.0", port=8123, reload=True)

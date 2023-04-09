@@ -1,0 +1,173 @@
+openapi: 3.0.2
+info:
+  title: CBS Opendata Plugin API
+  description: An API for querying CBS Opendata based on natural language queries
+  version: 1.0.0
+servers:
+- url: https://chatdata.nl
+paths:
+  "/filtered_table_list":
+    post:
+      summary: Filtered Table List
+      description: Accepts search strings array each with a natural language query
+        for a table. Break down complex questions into sub-questions. Refine results
+        by criteria, e.g. time / source, don't do this often. Split queries if ResponseTooLargeError
+        occurs.
+      operationId: filtered_table_list_filtered_table_list_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/FilteredTableListRequest"
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/FilteredTableListResponse"
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/HTTPValidationError"
+      security:
+      - HTTPBearer: []
+components:
+  schemas:
+    FilteredTableListRequest:
+      title: FilteredTableListRequest
+      required:
+      - query
+      type: object
+      properties:
+        query:
+          title: Query
+          type: string
+    FilteredTableListResponse:
+      title: FilteredTableListResponse
+      required:
+      - filtered_tables
+      type: object
+      properties:
+        filtered_tables:
+          title: Filtered Tables
+          type: array
+          items:
+            "$ref": "#/components/schemas/TableInfoWithScore"
+    HTTPValidationError:
+      title: HTTPValidationError
+      type: object
+      properties:
+        detail:
+          title: Detail
+          type: array
+          items:
+            "$ref": "#/components/schemas/ValidationError"
+    TableInfoWithScore:
+      title: TableInfoWithScore
+      required:
+      - Identifier
+      - Title
+      - ShortTitle
+      - ShortDescription
+      - Period
+      - score
+      type: object
+      properties:
+        Identifier:
+          title: Identifier
+          type: string
+        Title:
+          title: Title
+          type: string
+        ShortTitle:
+          title: Shorttitle
+          type: string
+        ShortDescription:
+          title: Shortdescription
+          type: string
+        Period:
+          title: Period
+          type: string
+        Updated:
+          title: Updated
+          type: string
+        Language:
+          title: Language
+          type: string
+        Catalog:
+          title: Catalog
+          type: string
+        Frequency:
+          title: Frequency
+          type: string
+        Summary:
+          title: Summary
+          type: string
+        Modified:
+          title: Modified
+          type: string
+        MetaDataModified:
+          title: Metadatamodified
+          type: string
+        OutputStatus:
+          title: Outputstatus
+          type: string
+        Source:
+          title: Source
+          type: string
+        ApiUrl:
+          title: Apiurl
+          type: string
+        FeedUrl:
+          title: Feedurl
+          type: string
+        DefaultPresentation:
+          title: Defaultpresentation
+          type: string
+        DefaultSelection:
+          title: Defaultselection
+          type: string
+        GraphTypes:
+          title: Graphtypes
+          type: string
+        RecordCount:
+          title: Recordcount
+          type: integer
+        ColumnCount:
+          title: Columncount
+          type: integer
+        SearchPriority:
+          title: Searchpriority
+          type: string
+        score:
+          title: Score
+          type: number
+    ValidationError:
+      title: ValidationError
+      required:
+      - loc
+      - msg
+      - type
+      type: object
+      properties:
+        loc:
+          title: Location
+          type: array
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+        msg:
+          title: Message
+          type: string
+        type:
+          title: Error Type
+          type: string
+  securitySchemes:
+    HTTPBearer:
+      type: http
+      scheme: bearer

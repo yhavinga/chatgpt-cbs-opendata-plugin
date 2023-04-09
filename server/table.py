@@ -1,12 +1,16 @@
 import json
 import os
+import duckdb
 
 import cbsodata
 import faiss
 import numpy as np
 import pandas as pd
 
-from services.openai import get_embeddings
+from services.openai import get_embeddings, get_chat_completion
+from typing import Union
+
+
 
 TABLE_LIST = "table_list.csv"
 EMBEDDINGS = "embeddings.jsonl"
@@ -93,6 +97,14 @@ def get_table_list():
         # filter the table list to ReasonDelivery != Stopgezet
         df = df[df.ReasonDelivery != "Stopgezet"]
         save_table_list(df)
+    return df
+
+
+def get_table_data(identifier):
+    data = cbsodata.get_data(identifier)
+
+    # convert to pandas dataframe
+    df = pd.DataFrame(data)
     return df
 
 
