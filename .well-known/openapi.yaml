@@ -9,9 +9,9 @@ paths:
   "/filtered_table_list":
     post:
       summary: Filtered Table List
-      description: Accepts search strings array each with a natural language query
-        for a table. Break down complex questions into sub-questions. Refine results
-        by criteria, e.g. time / source, don't do this often. Split queries if ResponseTooLargeError
+      description: Accepts a natural language query to find matching CBS opendata
+        tables. Returns the table identifiers and summaries including time periods.
+        Break down complex questions into sub-questions. Split queries if ResponseTooLargeError
         occurs.
       operationId: filtered_table_list_filtered_table_list_post
       requestBody:
@@ -27,6 +27,63 @@ paths:
             application/json:
               schema:
                 "$ref": "#/components/schemas/FilteredTableListResponse"
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/HTTPValidationError"
+      security:
+      - HTTPBearer: []
+  "/table_metadata/{table_id}":
+    post:
+      summary: Table Metadata
+      description: Returns metadata for a table given an identifier. Metadata is the
+        column information and example data.
+      operationId: table_metadata_table_metadata__table_id__post
+      parameters:
+      - required: true
+        schema:
+          title: Table Id
+          type: string
+        name: table_id
+        in: path
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TableMetadataResponse"
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/HTTPValidationError"
+      security:
+      - HTTPBearer: []
+  "/query_table_data":
+    post:
+      summary: Query Table Data
+      description: Accepts a CBS opendata table identifier and a natural language
+        query on this table. Table identifiers and dataset time periods can be found
+        with /filtered_table_list endpoint. Split queries if ResponseTooLargeError
+        occurs.
+      operationId: query_table_data_query_table_data_post
+      requestBody:
+        content:
+          application/json:
+            schema:
+              "$ref": "#/components/schemas/TableDataQueryRequest"
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                "$ref": "#/components/schemas/TableDataQueryResponse"
         '422':
           description: Validation Error
           content:
@@ -66,6 +123,45 @@ components:
           type: array
           items:
             "$ref": "#/components/schemas/ValidationError"
+    TableColumnInfo:
+      title: TableColumnInfo
+      required:
+      - column_name
+      - column_type
+      type: object
+      properties:
+        column_name:
+          title: Column Name
+          type: string
+        column_type:
+          title: Column Type
+          type: string
+    TableDataQueryRequest:
+      title: TableDataQueryRequest
+      required:
+      - table_id
+      - natural_language_query
+      type: object
+      properties:
+        table_id:
+          title: Table Id
+          type: string
+        natural_language_query:
+          title: Natural Language Query
+          type: string
+    TableDataQueryResponse:
+      title: TableDataQueryResponse
+      required:
+      - processed_query
+      - data
+      type: object
+      properties:
+        processed_query:
+          title: Processed Query
+          type: string
+        data:
+          title: Data
+          type: string
     TableInfoWithScore:
       title: TableInfoWithScore
       required:
@@ -146,6 +242,25 @@ components:
         score:
           title: Score
           type: number
+    TableMetadataResponse:
+      title: TableMetadataResponse
+      required:
+      - table_id
+      - column_info
+      - example_data
+      type: object
+      properties:
+        table_id:
+          title: Table Id
+          type: string
+        column_info:
+          title: Column Info
+          type: array
+          items:
+            "$ref": "#/components/schemas/TableColumnInfo"
+        example_data:
+          title: Example Data
+          type: string
     ValidationError:
       title: ValidationError
       required:

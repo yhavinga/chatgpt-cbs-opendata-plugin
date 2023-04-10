@@ -1,7 +1,7 @@
 import os
 from typing import List
 
-import openai
+import openai as openai_api
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 
@@ -20,7 +20,7 @@ def get_embeddings(texts: List[str]) -> List[List[float]]:
         Exception: If the OpenAI API call fails.
     """
     # Call the OpenAI API to get the embeddings
-    response = openai.Embedding.create(input=texts, model="text-embedding-ada-002")
+    response = openai_api.Embedding.create(input=texts, model="text-embedding-ada-002")
 
     # Extract the embedding data from the response
     data = response["data"]  # type: ignore
@@ -29,7 +29,7 @@ def get_embeddings(texts: List[str]) -> List[List[float]]:
     return [result["embedding"] for result in data]
 
 
-@retry(wait=wait_random_exponential(min=1, max=20), stop=stop_after_attempt(3))
+# @retry(wait=wait_random_exponential(min=1, max=20), stop=stop_after_attempt(3))
 def get_chat_completion(
     messages,
     model="gpt-3.5-turbo",  # use "gpt-4" for better results
@@ -48,9 +48,11 @@ def get_chat_completion(
         Exception: If the OpenAI API call fails.
     """
     # call the OpenAI chat completion API with the given messages
-    response = openai.ChatCompletion.create(
+    response = openai_api.ChatCompletion.create(
         model=model,
         messages=messages,
+        temperature=0,
+        # top_p=0.1,
     )
 
     choices = response["choices"]  # type: ignore

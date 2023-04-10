@@ -38,3 +38,24 @@ class FilteredTableListRequest(BaseModel):
 
 class FilteredTableListResponse(BaseModel):
     filtered_tables: List[TableInfoWithScore]
+
+
+class TableColumnInfo(BaseModel):
+    column_name: str
+    column_type: str
+
+
+class TableMetadataResponse(BaseModel):
+    table_id: str
+    column_info: List[TableColumnInfo]
+    example_data: str  # Serialized CSV text
+
+
+class TableDataQueryRequest(BaseModel):
+    table_id: str
+    natural_language_query: str
+
+
+class TableDataQueryResponse(BaseModel):
+    processed_query: str
+    data: str  # Serialized CSV text

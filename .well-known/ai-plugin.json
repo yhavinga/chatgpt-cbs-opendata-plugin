@@ -8,7 +8,7 @@
     "type": "service_http",
     "authorization_type": "bearer",
      "verification_tokens": {
-       "openai": "519f183e5f294615b8ee706db6b6f0bf"
+       "openai": "f6cd444e3c8e458687b6c6dc9a60c576"
     }
   },
   "api": {
@@ -16,7 +16,7 @@
     "url": "https://chatdata.nl/.well-known/openapi.yaml",
     "has_user_authentication": false
   },
-  "logo_url": "https://cdn.cbs.nl/icons/navigation/cbs-logo-brand-nl.svg",
+  "logo_url": "https://www.cbs.nl/Content/images/cbs-ld-logo.png",
   "contact_email": "yhavinga@gmail.com",
   "legal_info_url": "https://www.cbs.nl/nl-nl/onze-diensten/open-data"
 }

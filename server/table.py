@@ -1,19 +1,35 @@
+import io
 import json
 import os
-import duckdb
+import re
+from typing import Union
 
 import cbsodata
+import duckdb
 import faiss
 import numpy as np
 import pandas as pd
+from diskcache import Cache
+from pandas import Index, Series
+from RestrictedPython import compile_restricted
+from RestrictedPython.Eval import (default_guarded_getattr,
+                                   default_guarded_getitem,
+                                   default_guarded_getiter)
+from RestrictedPython.Guards import (guarded_iter_unpack_sequence,
+                                     guarded_unpack_sequence)
 
-from services.openai import get_embeddings, get_chat_completion
-from typing import Union
-
-
+from services.openai import get_chat_completion, get_embeddings
 
 TABLE_LIST = "table_list.csv"
 EMBEDDINGS = "embeddings.jsonl"
+
+cache_directory = "cache_directory"
+cache_size_limit = 5 * 1024 * 1024 * 1024  # 5GB
+cache = Cache(cache_directory, size_limit=cache_size_limit)
+
+pd.set_option("display.max_columns", 200)
+pd.set_option("display.max_colwidth", 20000)
+pd.set_option("display.expand_frame_repr", False)
 
 
 """
@@ -100,11 +116,33 @@ def get_table_list():
     return df
 
 
+def get_table_summary(identifier):
+    df = get_table_list()
+    # get the Summary column for the table with the given identifier
+    return df[df.Identifier == identifier].Summary.values[0]
+
+
+def save_dataframe_to_cache(identifier, df):
+    cache[identifier] = df.to_csv(index=False)
+
+
+def load_dataframe_from_cache(identifier):
+    csv_str = cache[identifier]
+    return pd.read_csv(io.StringIO(csv_str))
+
+
 def get_table_data(identifier):
+    if identifier in cache:
+        return load_dataframe_from_cache(identifier)
+
     data = cbsodata.get_data(identifier)
 
     # convert to pandas dataframe
     df = pd.DataFrame(data)
+
+    # Save the DataFrame to the cache
+    save_dataframe_to_cache(identifier, df)
+
     return df
 
 
@@ -151,13 +189,13 @@ def embed_table(df: pd.DataFrame):
 
 class TableSearcher:
     def __init__(self):
-        df = get_table_list()
         self.embed_df = get_table_embeddings()
-        self.df = df.merge(self.embed_df, on="Identifier")
+        self.df = get_table_list().merge(self.embed_df, on="Identifier")
         self.embeddings = np.vstack(self.df.Embedding.to_list())
         self.index = self._build_faiss_index(self.embeddings)
 
-    def _build_faiss_index(self, embeddings: np.ndarray):
+    @staticmethod
+    def _build_faiss_index(embeddings: np.ndarray) -> faiss.IndexFlatL2:
         index = faiss.IndexFlatL2(embeddings.shape[1])
         index.add(embeddings)
         return index
@@ -170,8 +208,107 @@ class TableSearcher:
         return results.to_dict(orient="records")
 
 
+class TableQuerier:
+    def __init__(self, df: pd.DataFrame):
+        self.df = df
+
+    @staticmethod
+    def clean_response(response: str) -> str:
+        # Check if code block markers are present
+        if "```" in response:
+            # Remove text before the code block
+            code_start = response.find("```")
+            if code_start > -1:
+                response = response[code_start:]
+
+            # Remove markdown code block markers and extract the code block
+            code_block = re.search(
+                r"```(?:[\w]*\n)?(.*?)```", response, flags=re.DOTALL
+            )
+
+            if code_block:
+                return code_block.group(1).strip()
+            else:
+                return ""
+        else:
+            # If no markdown code block markers, return the response as it is
+            return response.strip()
+
+    def translate_query(self, query: str) -> str:
+        prompt = f"""df.head(n=3): ```{self.df.head(n=3)}``` query: ```{query}```
+give python pandas code to answer the query and assign the result to the 'result' variable.
+Note that given is not the complete dataframe just the first 3 rows.
+The result of the code must be a pandas dataframe, not a list or numpy array.
+Do not prepend or append any comments to the code, because your answer will be evaluated by a python program.
+""".replace(
+            "\n", " "
+        )
+        print(prompt)
+        messages = [
+            {
+                "role": "system",
+                "content": """You are a highly experienced python pandas programmer.
+                Your task it to convert queries to code.
+                You respond only with python code.""".replace(
+                    "\n", " "
+                ),
+            },
+            {"role": "user", "content": prompt},
+        ]
+        response = get_chat_completion(messages)
+        return self.clean_response(response)
+
+    def query(self, query: Union[str, dict]) -> (str, pd.DataFrame):
+        pandas_query = self.translate_query(query)
+
+        # Define the restricted environment
+        local_vars = {"result": None}
+        global_vars = {
+            "__builtins__": {
+                "getattr": getattr,
+                "len": len,
+                "range": range,
+                "int": int,
+                "float": float,
+                "str": str,
+            },
+            "_getattr_": default_guarded_getattr,
+            "_getiter_": default_guarded_getiter,
+            "_getitem_": default_guarded_getitem,
+            "_iter_unpack_sequence_": guarded_iter_unpack_sequence,
+            "_unpack_sequence_": guarded_unpack_sequence,
+            "pd": pd,
+            "df": self.df,
+        }
+
+        # Compile and execute the restricted code
+        compiled_code = compile_restricted(pandas_query, "<string>", "exec")
+        exec(compiled_code, global_vars, local_vars)
+
+        print(pandas_query)
+        result: pd.DataFrame = local_vars["result"]
+
+        if isinstance(result, Index):
+            result = pd.DataFrame(result)
+        elif isinstance(result, Series):
+            result = pd.DataFrame(result)
+        elif isinstance(result, np.ndarray):
+            result = pd.DataFrame(result)
+        elif isinstance(result, list):
+            result = pd.DataFrame(result)
+        elif isinstance(result, int):
+            result = pd.DataFrame([result])
+
+        max_rows = 200 // len(result.columns) if len(result.columns) > 0 else 200
+        result = result.head(max_rows)
+
+        return pandas_query, result
+
+
 if __name__ == "__main__":
     ts = TableSearcher()
     print(ts.df.head())
-    results = ts("Personen boven de 18 die nog thuis wonen")
-    print(results)
+    # results = ts("Personen boven de 18 die nog thuis wonen")
+    # print(results)
+    df = get_table_data("84669NED")
+    print(df.head())

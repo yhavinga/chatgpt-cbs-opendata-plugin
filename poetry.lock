@@ -379,6 +379,18 @@ files = [
 ]
 
 [[package]]
+name = "diskcache"
+version = "5.4.0"
+description = "Disk Cache -- Disk and file backed persistent cache."
+category = "main"
+optional = false
+python-versions = ">=3"
+files = [
+    {file = "diskcache-5.4.0-py3-none-any.whl", hash = "sha256:af3ec6d7f167bbef7b6c33d9ee22f86d3e8f2dd7131eb7c4703d8d91ccdc0cc4"},
+    {file = "diskcache-5.4.0.tar.gz", hash = "sha256:8879eb8c9b4a2509a5e633d2008634fb2b0b35c2b36192d89655dbde02419644"},
+]
+
+[[package]]
 name = "dparse"
 version = "0.6.2"
 description = "A parser for Python dependency files"
@@ -1006,18 +1018,17 @@ diagrams = ["jinja2", "railroad-diagrams"]
 
 [[package]]
 name = "pytest"
-version = "7.2.2"
+version = "7.3.0"
 description = "pytest: simple powerful testing with Python"
 category = "main"
 optional = false
 python-versions = ">=3.7"
 files = [
-    {file = "pytest-7.2.2-py3-none-any.whl", hash = "sha256:130328f552dcfac0b1cec75c12e3f005619dc5f874f0a06e8ff7263f0ee6225e"},
-    {file = "pytest-7.2.2.tar.gz", hash = "sha256:c99ab0c73aceb050f68929bc93af19ab6db0558791c6a0715723abe9d0ade9d4"},
+    {file = "pytest-7.3.0-py3-none-any.whl", hash = "sha256:933051fa1bfbd38a21e73c3960cebdad4cf59483ddba7696c48509727e17f201"},
+    {file = "pytest-7.3.0.tar.gz", hash = "sha256:58ecc27ebf0ea643ebfdf7fb1249335da761a00c9f955bcd922349bcb68ee57d"},
 ]
 
 [package.dependencies]
-attrs = ">=19.2.0"
 colorama = {version = "*", markers = "sys_platform == \"win32\""}
 exceptiongroup = {version = ">=1.0.0rc8", markers = "python_version < \"3.11\""}
 iniconfig = "*"
@@ -1026,7 +1037,7 @@ pluggy = ">=0.12,<2.0"
 tomli = {version = ">=1.0.0", markers = "python_version < \"3.11\""}
 
 [package.extras]
-testing = ["argcomplete", "hypothesis (>=3.56)", "mock", "nose", "pygments (>=2.7.2)", "requests", "xmlschema"]
+testing = ["argcomplete", "attrs (>=19.2.0)", "hypothesis (>=3.56)", "mock", "nose", "pygments (>=2.7.2)", "requests", "xmlschema"]
 
 [[package]]
 name = "pytest-asyncio"
@@ -1180,6 +1191,22 @@ urllib3 = ">=1.21.1,<1.27"
 [package.extras]
 socks = ["PySocks (>=1.5.6,!=1.5.7)"]
 use-chardet-on-py3 = ["chardet (>=3.0.2,<6)"]
+
+[[package]]
+name = "restrictedpython"
+version = "6.0"
+description = "RestrictedPython is a defined subset of the Python language which allows to provide a program input into a trusted environment."
+category = "main"
+optional = false
+python-versions = ">=3.6, <3.12"
+files = [
+    {file = "RestrictedPython-6.0-py3-none-any.whl", hash = "sha256:3479303f7bff48a7dedad76f96e7704993c5e86c5adbd67f607295d5352f0fb8"},
+    {file = "RestrictedPython-6.0.tar.gz", hash = "sha256:405cf0bd9eec2f19b1326b5f48228efe56d6590b4e91826b8cc3b2cd400a96ad"},
+]
+
+[package.extras]
+docs = ["Sphinx", "sphinx-rtd-theme"]
+test = ["pytest", "pytest-mock"]
 
 [[package]]
 name = "rfc3986"
@@ -1603,5 +1630,5 @@ multidict = ">=4.0"
 
 [metadata]
 lock-version = "2.0"
-python-versions = "^3.10"
-content-hash = "8a0a13dd053823ea860555145faf7a1307388205507a02b112bb45f7bfe545a6"
+python-versions = ">=3.10,<3.12"
+content-hash = "12da785ed07f85e190e2444e83bf817b8f743bba22870fffeb9037ebfe7f211a"
