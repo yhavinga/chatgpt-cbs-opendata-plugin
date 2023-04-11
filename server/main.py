@@ -16,11 +16,12 @@ from models.api import (
     TableDataQueryResponse,
     TableInfo,
     TableMetadataResponse,
+    TableInfoWithScore,
 )
 from server.logging import log_requests
 from server.table import TableQuerier, TableSearcher, get_table_data
 
-load_dotenv(".env")
+load_dotenv()
 
 bearer_scheme = HTTPBearer()
 BEARER_TOKEN = os.environ.get("BEARER_TOKEN")
@@ -62,27 +63,20 @@ app.mount("/sub", sub_app)
 table_searcher = TableSearcher()
 
 
-async def filter_tables_by_query(query: str):
-    filtered_table_list = table_searcher(query)
-    return filtered_table_list
-
-
-@app.post(
-    "/filtered_table_list",
-    response_model=FilteredTableListResponse,
-)
-async def filtered_table_list(
-    request: FilteredTableListRequest = Body(...),
-):
+async def handle_filtered_table_list(request: FilteredTableListRequest):
     try:
-        filtered_tables = await filter_tables_by_query(
-            request.query,
-        )
+        filtered_tables = [
+            TableInfoWithScore(**table) for table in table_searcher(request.query)
+        ]
         return FilteredTableListResponse(filtered_tables=filtered_tables)
-
     except Exception as e:
         error_message = str(e)
-        raise CustomHTTPException(status_code=500, detail=error_message)
+        raise CustomHTTPException(status_code=510, detail=error_message)
+
+
+@app.post("/filtered_table_list", response_model=FilteredTableListResponse)
+async def filtered_table_list(request: FilteredTableListRequest = Body(...)):
+    return await handle_filtered_table_list(request)
 
 
 @sub_app.post(
@@ -96,24 +90,11 @@ Split queries if ResponseTooLargeError occurs.""".replace(
         "\n", " "
     ),
 )
-async def filtered_table_list(
-    request: FilteredTableListRequest = Body(...),
-):
-    try:
-        filtered_tables = await filter_tables_by_query(
-            request.query,
-        )
-        return FilteredTableListResponse(filtered_tables=filtered_tables)
-    except Exception as e:
-        error_message = str(e)
-        raise CustomHTTPException(status_code=500, detail=error_message)
+async def filtered_table_list(request: FilteredTableListRequest = Body(...)):
+    return await handle_filtered_table_list(request)
 
 
-@app.post(
-    "/table_metadata/{table_id}",
-    response_model=TableMetadataResponse,
-)
-async def table_metadata(table_id: str):
+async def handle_table_metadata(table_id: str) -> TableMetadataResponse:
     try:
         df = get_table_data(table_id)
         column_info = [
@@ -129,6 +110,14 @@ async def table_metadata(table_id: str):
     except Exception as e:
         error_message = str(e)
         raise CustomHTTPException(status_code=510, detail=error_message)
+
+
+@app.post(
+    "/table_metadata/{table_id}",
+    response_model=TableMetadataResponse,
+)
+async def table_metadata(table_id: str):
+    return await handle_table_metadata(table_id)
 
 
 @sub_app.post(
@@ -141,28 +130,10 @@ Metadata is the column information and example data.
     ),
 )
 async def table_metadata(table_id: str):
-    try:
-        df = get_table_data(table_id)
-        column_info = [
-            TableColumnInfo(column_name=col, column_type=str(df[col].dtype))
-            for col in df.columns
-        ]
-        csv_buffer = StringIO()
-        df.head(5).to_csv(csv_buffer, index=False)
-        example_data = csv_buffer.getvalue()
-        return TableMetadataResponse(
-            table_id=table_id, column_info=column_info, example_data=example_data
-        )
-    except Exception as e:
-        error_message = str(e)
-        raise CustomHTTPException(status_code=510, detail=error_message)
+    return await handle_table_metadata(table_id)
 
 
-@app.post(
-    "/query_table_data",
-    response_model=TableDataQueryResponse,
-)
-async def query_table_data(request: TableDataQueryRequest):
+async def handle_query_table_data(request: TableDataQueryRequest):
     try:
         df = get_table_data(request.table_id)
         table_querier = TableQuerier(df)
@@ -174,6 +145,14 @@ async def query_table_data(request: TableDataQueryRequest):
     except Exception as e:
         error_message = str(e)
         raise CustomHTTPException(status_code=510, detail=error_message)
+
+
+@app.post(
+    "/query_table_data",
+    response_model=TableDataQueryResponse,
+)
+async def query_table_data(request: TableDataQueryRequest):
+    return await handle_query_table_data(request)
 
 
 @sub_app.post(
@@ -186,17 +165,7 @@ Split queries if ResponseTooLargeError occurs.""".replace(
     ),
 )
 async def query_table_data(request: TableDataQueryRequest):
-    try:
-        df = get_table_data(request.table_id)
-        table_querier = TableQuerier(df)
-        pandas_query, result_df = table_querier.query(request.natural_language_query)
-        csv_buffer = StringIO()
-        result_df.to_csv(csv_buffer, index=False)
-        data = csv_buffer.getvalue()
-        return TableDataQueryResponse(processed_query=pandas_query, data=data)
-    except Exception as e:
-        error_message = str(e)
-        raise CustomHTTPException(status_code=510, detail=error_message)
+    return await handle_query_table_data(request)
 
 
 def start():
