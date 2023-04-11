@@ -13,6 +13,7 @@ from models.api import (FilteredTableListRequest, FilteredTableListResponse,
                         TableDataQueryResponse, TableInfo,
                         TableMetadataResponse)
 from server.table import TableQuerier, TableSearcher, get_table_data
+from server.logging import log_requests
 
 load_dotenv(".env")
 
@@ -38,6 +39,8 @@ async def custom_http_exception_handler(request: Request, exc: CustomHTTPExcepti
 
 
 app = FastAPI(dependencies=[Depends(validate_token)])
+app.add_exception_handler(CustomHTTPException, custom_http_exception_handler)
+app.middleware("http")(log_requests)
 app.mount("/.well-known", StaticFiles(directory=".well-known"), name="static")
 
 # Create a sub-application, in order to access just the query endpoint in an OpenAPI schema,
@@ -50,7 +53,6 @@ sub_app = FastAPI(
     dependencies=[Depends(validate_token)],
 )
 app.mount("/sub", sub_app)
-app.add_exception_handler(CustomHTTPException, custom_http_exception_handler)
 
 table_searcher = TableSearcher()
 
@@ -116,7 +118,6 @@ async def table_metadata(table_id: str):
         csv_buffer = StringIO()
         df.head(5).to_csv(csv_buffer, index=False)
         example_data = csv_buffer.getvalue()
-
         return TableMetadataResponse(
             table_id=table_id, column_info=column_info, example_data=example_data
         )
@@ -144,7 +145,6 @@ async def table_metadata(table_id: str):
         csv_buffer = StringIO()
         df.head(5).to_csv(csv_buffer, index=False)
         example_data = csv_buffer.getvalue()
-
         return TableMetadataResponse(
             table_id=table_id, column_info=column_info, example_data=example_data
         )
@@ -160,14 +160,8 @@ async def table_metadata(table_id: str):
 async def query_table_data(request: TableDataQueryRequest):
     try:
         df = get_table_data(request.table_id)
-
-        # Initialize the TableQuerier with the DataFrame
         table_querier = TableQuerier(df)
-
-        # Perform the natural language query
         pandas_query, result_df = table_querier.query(request.natural_language_query)
-
-        # Serialize the resulting data as CSV
         csv_buffer = StringIO()
         result_df.to_csv(csv_buffer, index=False)
         data = csv_buffer.getvalue()
@@ -189,14 +183,8 @@ Split queries if ResponseTooLargeError occurs.""".replace(
 async def query_table_data(request: TableDataQueryRequest):
     try:
         df = get_table_data(request.table_id)
-
-        # Initialize the TableQuerier with the DataFrame
         table_querier = TableQuerier(df)
-
-        # Perform the natural language query
         pandas_query, result_df = table_querier.query(request.natural_language_query)
-
-        # Serialize the resulting data as CSV
         csv_buffer = StringIO()
         result_df.to_csv(csv_buffer, index=False)
         data = csv_buffer.getvalue()
