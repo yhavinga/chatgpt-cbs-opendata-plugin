@@ -1,5 +1,3 @@
-import os
-
 from fastapi.testclient import TestClient
 
 from server.main import BEARER_TOKEN, app

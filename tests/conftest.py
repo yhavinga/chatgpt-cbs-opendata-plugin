@@ -1,4 +1,4 @@
-from typing import List
+from typing import Dict, List
 
 import numpy as np
 import pytest
@@ -17,15 +17,15 @@ def mock_get_embeddings(texts: List[str]) -> List[np.ndarray]:
     return [np.round(hash_text(text) + sin_values, 1).tolist() for text in texts]
 
 
-def mock_get_chat_completion(prompt: str) -> str:
-    if "column1 is greater than 50" in prompt:
+def mock_get_chat_completion(messages: List[Dict]) -> str:
+    if "column1 is greater than 50" in messages[-1]["content"]:
         return "result = df[df['column1'] > 50]"
     return ""
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture()
 def mock_openai(monkeypatch):
     # NB: we need to mock the get_embeddings that's imported in the chunk's module,
     # not the openai module
     monkeypatch.setattr("server.table.get_embeddings", mock_get_embeddings)
-    # monkeypatch.setattr("server.table.get_chat_completion", mock_get_chat_completion)
+    monkeypatch.setattr("server.table.get_chat_completion", mock_get_chat_completion)

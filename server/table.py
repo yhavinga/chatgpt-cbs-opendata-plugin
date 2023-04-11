@@ -2,7 +2,7 @@ import io
 import json
 import os
 import re
-from typing import Union
+from typing import Dict, List, Union
 
 import cbsodata
 import duckdb
@@ -12,11 +12,15 @@ import pandas as pd
 from diskcache import Cache
 from pandas import Index, Series
 from RestrictedPython import compile_restricted
-from RestrictedPython.Eval import (default_guarded_getattr,
-                                   default_guarded_getitem,
-                                   default_guarded_getiter)
-from RestrictedPython.Guards import (guarded_iter_unpack_sequence,
-                                     guarded_unpack_sequence)
+from RestrictedPython.Eval import (
+    default_guarded_getattr,
+    default_guarded_getitem,
+    default_guarded_getiter,
+)
+from RestrictedPython.Guards import (
+    guarded_iter_unpack_sequence,
+    guarded_unpack_sequence,
+)
 
 from services.openai import get_chat_completion, get_embeddings
 
@@ -200,7 +204,7 @@ class TableSearcher:
         index.add(embeddings)
         return index
 
-    def __call__(self, query: str, top_n: int = 3):
+    def __call__(self, query: str, top_n: int = 3) -> List[Dict]:
         query_embedding = get_embeddings([query])[0]
         distances, indices = self.index.search(np.array([query_embedding]), top_n)
         results = self.df.iloc[indices[0]].copy()
@@ -213,17 +217,17 @@ class TableQuerier:
         self.df = df
 
     @staticmethod
-    def clean_response(response: str) -> str:
+    def get_code_from_completion(completion: str) -> str:
         # Check if code block markers are present
-        if "```" in response:
+        if "```" in completion:
             # Remove text before the code block
-            code_start = response.find("```")
+            code_start = completion.find("```")
             if code_start > -1:
-                response = response[code_start:]
+                completion = completion[code_start:]
 
             # Remove markdown code block markers and extract the code block
             code_block = re.search(
-                r"```(?:[\w]*\n)?(.*?)```", response, flags=re.DOTALL
+                r"```(?:[\w]*\n)?(.*?)```", completion, flags=re.DOTALL
             )
 
             if code_block:
@@ -231,15 +235,17 @@ class TableQuerier:
             else:
                 return ""
         else:
-            # If no markdown code block markers, return the response as it is
-            return response.strip()
+            return completion.strip()
 
     def translate_query(self, query: str) -> str:
-        prompt = f"""df.head(n=3): ```{self.df.head(n=3)}``` query: ```{query}```
-give python pandas code to answer the query and assign the result to the 'result' variable.
-Note that given is not the complete dataframe just the first 3 rows.
+        df_head = re.sub(r"\s+", " ", str(self.df.head(n=3)))
+        prompt = f"""df.head(n=3): ```{df_head}``` query: ```{query}```
+NB! the data above is an example so you know the format. Do not come to the conclusion that the query cannot be answered
+because the data is incomplete. Your answer will run on the complete dataframe.
+Your task it to write one or more python pandas instructions on this dataframe to answer the user query.
+Think step by step how to massage the dataframe to match the user query.
+Return one or more python code lines with pandas dataframe operations to answer the query and assign the result to the 'result' variable.
 The result of the code must be a pandas dataframe, not a list or numpy array.
-Do not prepend or append any comments to the code, because your answer will be evaluated by a python program.
 """.replace(
             "\n", " "
         )
@@ -247,18 +253,19 @@ Do not prepend or append any comments to the code, because your answer will be e
         messages = [
             {
                 "role": "system",
-                "content": """You are a highly experienced python pandas programmer.
-                Your task it to convert queries to code.
-                You respond only with python code.""".replace(
+                "content": """Answer as a highly experienced python pandas programmer without attitude.
+Your task is to convert natural language queries to python pandas code.
+Assume the user gives example rows and your response will run on the complete data.
+Make the best possible assumption mapping the query to the columns.""".replace(
                     "\n", " "
                 ),
             },
             {"role": "user", "content": prompt},
         ]
         response = get_chat_completion(messages)
-        return self.clean_response(response)
+        return self.get_code_from_completion(response)
 
-    def query(self, query: Union[str, dict]) -> (str, pd.DataFrame):
+    def query(self, query: str) -> (str, pd.DataFrame):
         pandas_query = self.translate_query(query)
 
         # Define the restricted environment

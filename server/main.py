@@ -8,12 +8,17 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 
-from models.api import (FilteredTableListRequest, FilteredTableListResponse,
-                        TableColumnInfo, TableDataQueryRequest,
-                        TableDataQueryResponse, TableInfo,
-                        TableMetadataResponse)
-from server.table import TableQuerier, TableSearcher, get_table_data
+from models.api import (
+    FilteredTableListRequest,
+    FilteredTableListResponse,
+    TableColumnInfo,
+    TableDataQueryRequest,
+    TableDataQueryResponse,
+    TableInfo,
+    TableMetadataResponse,
+)
 from server.logging import log_requests
+from server.table import TableQuerier, TableSearcher, get_table_data
 
 load_dotenv(".env")
 
