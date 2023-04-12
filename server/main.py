@@ -1,25 +1,15 @@
 import os
-from io import StringIO
 
 import uvicorn
+import traceback
 from dotenv import load_dotenv
-from fastapi import Body, Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse
 
-from models.api import (
-    FilteredTableListRequest,
-    FilteredTableListResponse,
-    TableColumnInfo,
-    TableDataQueryRequest,
-    TableDataQueryResponse,
-    TableInfo,
-    TableInfoWithScore,
-    TableMetadataResponse,
-)
-from server.logging import log_requests
-from server.table import TableQuerier, TableSearcher, get_table_data
+from server.logger import log_requests, logger
+from server.routes import router, sub_router
 
 load_dotenv()
 
@@ -40,6 +30,8 @@ class AppExceptionHandlerMiddleware:
             response = await call_next(request)
             return response
         except Exception as e:
+            logger.error(f"An error occurred: {str(e)}")
+            logger.error(traceback.format_exc())
             return JSONResponse(status_code=510, content={"detail": str(e)})
 
 
@@ -47,6 +39,7 @@ app = FastAPI(dependencies=[Depends(validate_token)])
 app.middleware("http")(log_requests)
 app.middleware("http")(AppExceptionHandlerMiddleware())
 app.mount("/.well-known", StaticFiles(directory=".well-known"), name="static")
+app.include_router(router)
 
 # Create a sub-application, in order to access just the query endpoint in an OpenAPI schema,
 # found at http://0.0.0.0:8000/sub/openapi.json when the app is running locally
@@ -57,103 +50,8 @@ sub_app = FastAPI(
     servers=[{"url": "https://chatdata.nl"}],
     dependencies=[Depends(validate_token)],
 )
+sub_app.include_router(sub_router)
 app.mount("/sub", sub_app)
-
-
-table_searcher = TableSearcher()
-
-
-async def handle_filtered_table_list(request: FilteredTableListRequest):
-    filtered_tables = [
-        TableInfoWithScore(**table) for table in table_searcher(request.query)
-    ]
-    return FilteredTableListResponse(filtered_tables=filtered_tables)
-
-
-@app.post("/filtered_table_list", response_model=FilteredTableListResponse)
-async def filtered_table_list(request: FilteredTableListRequest = Body(...)):
-    return await handle_filtered_table_list(request)
-
-
-@sub_app.post(
-    "/filtered_table_list",
-    response_model=FilteredTableListResponse,
-    # NOTE: We are describing the shape of the API endpoint input due to a current limitation in parsing arrays of objects from OpenAPI schemas. This will not be necessary in the future.
-    description="""Accepts a natural language query to find matching CBS opendata tables.
-Returns the table identifiers and summaries including time periods.
-Break down complex questions into sub-questions.
-Split queries if ResponseTooLargeError occurs.""".replace(
-        "\n", " "
-    ),
-)
-async def filtered_table_list(request: FilteredTableListRequest = Body(...)):
-    return await handle_filtered_table_list(request)
-
-
-async def handle_table_metadata(table_id: str) -> TableMetadataResponse:
-    df = get_table_data(table_id)
-    column_info = [
-        TableColumnInfo(column_name=col, column_type=str(df[col].dtype))
-        for col in df.columns
-    ]
-    csv_buffer = StringIO()
-    df.head(5).to_csv(csv_buffer, index=False)
-    example_data = csv_buffer.getvalue()
-    return TableMetadataResponse(
-        table_id=table_id, column_info=column_info, example_data=example_data
-    )
-
-
-@app.post(
-    "/table_metadata/{table_id}",
-    response_model=TableMetadataResponse,
-)
-async def table_metadata(table_id: str):
-    return await handle_table_metadata(table_id)
-
-
-@sub_app.post(
-    "/table_metadata/{table_id}",
-    response_model=TableMetadataResponse,
-    description="""Returns metadata for a table given an identifier.
-Metadata is the column information and example data.
-""".replace(
-        "\n", " "
-    ),
-)
-async def table_metadata(table_id: str):
-    return await handle_table_metadata(table_id)
-
-
-async def handle_query_table_data(request: TableDataQueryRequest):
-    df = get_table_data(request.table_id)
-    table_querier = TableQuerier(df)
-    pandas_query, result_df = table_querier.query(request.natural_language_query)
-    csv_buffer = StringIO()
-    result_df.to_csv(csv_buffer, index=False)
-    data = csv_buffer.getvalue()
-    return TableDataQueryResponse(processed_query=pandas_query, data=data)
-
-
-@app.post(
-    "/query_table_data",
-    response_model=TableDataQueryResponse,
-)
-async def query_table_data(request: TableDataQueryRequest):
-    return await handle_query_table_data(request)
-
-
-@sub_app.post(
-    "/query_table_data",
-    response_model=TableDataQueryResponse,
-    description="""Accepts a CBS opendata table identifier and a natural language query on this table.
-Table identifiers and dataset time periods can be found with /filtered_table_list endpoint.
-Split queries if ResponseTooLargeError occurs.""".replace(
-        "\n", " "
-    ),
-)
-async def query_table_data(request: TableDataQueryRequest):
-    return await handle_query_table_data(request)
 
 
 def start():

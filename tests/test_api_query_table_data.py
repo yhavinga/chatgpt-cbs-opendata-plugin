@@ -21,6 +21,22 @@ def test_query_table_data():
     csv_data = response.json()["data"]
 
 
+def test_query_table_data():
+    headers = {"Authorization": f"Bearer {BEARER_TOKEN}"}
+    response = client.post(
+        "/query_table_data",
+        json={
+            "table_id": "84952NED",
+            "natural_language_query": "Hoeveel kippen zijn er in Nederland in december 2022?",
+        },
+        headers=headers,
+    )
+
+    processed_query = response.json()["processed_query"]
+    print(processed_query)
+    csv_data = response.json()["data"]
+
+
 def test_query_table_data_error_80190eng():
     response = client.post(
         "/query_table_data",
