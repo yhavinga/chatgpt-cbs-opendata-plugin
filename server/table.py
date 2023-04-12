@@ -23,6 +23,7 @@ from RestrictedPython.Guards import (
 )
 
 from services.openai import get_chat_completion, get_embeddings
+from server.logger import logger
 
 TABLE_LIST = "table_list.csv"
 EMBEDDINGS = "embeddings.jsonl"
@@ -34,6 +35,7 @@ cache = Cache(cache_directory, size_limit=cache_size_limit)
 pd.set_option("display.max_columns", 200)
 pd.set_option("display.max_colwidth", 20000)
 pd.set_option("display.expand_frame_repr", False)
+pd.set_option("display.float_format", lambda x: "%.1f" % x)
 
 
 """
@@ -120,10 +122,10 @@ def get_table_list():
     return df
 
 
-def get_table_summary(identifier):
-    df = get_table_list()
-    # get the Summary column for the table with the given identifier
-    return df[df.Identifier == identifier].Summary.values[0]
+# def get_table_summary_column(identifier):
+#     df = get_table_list()
+#     # get the Summary column for the table with the given identifier
+#     return df[df.Identifier == identifier].Summary.values[0]
 
 
 def save_dataframe_to_cache(identifier, df):
@@ -191,6 +193,40 @@ def embed_table(df: pd.DataFrame):
             file.write(json.dumps(embedding_data) + "\n")
 
 
+def table_summary(df: pd.DataFrame) -> pd.DataFrame:
+    summary_rows = {
+        "missing": df.isna().sum(),
+        "unique": df.nunique(),
+    }
+
+    summary_rows.update(
+        {
+            stat: df.apply(
+                lambda x: x.__getattribute__(stat)()
+                if x.dtype.kind in "biufc"
+                else None
+            )
+            for stat in ["mean", "std", "min", "max"]
+        }
+    )
+
+    summary_rows.update(
+        {
+            f"{int(q * 100)}%": df.apply(
+                lambda x: x.quantile(q) if x.dtype.kind in "biufc" else None
+            )
+            for q in [0.25, 0.50, 0.75]
+        }
+    )
+
+    top_5_categories = df.select_dtypes(include=["object", "category"]).apply(
+        lambda x: x.value_counts().head(5).to_dict()
+    )
+    summary_rows["top_5"] = top_5_categories
+
+    return pd.DataFrame(summary_rows)
+
+
 class TableSearcher:
     def __init__(self):
         self.embed_df = get_table_embeddings()
@@ -237,18 +273,40 @@ class TableQuerier:
         else:
             return completion.strip()
 
-    def translate_query(self, query: str) -> str:
-        df_head = re.sub(r"\s+", " ", str(self.df.head(n=3)))
-        prompt = f"""df.head(n=3): ```{df_head}``` query: ```{query}```
-NB! the data above is an example so you know the format. Do not come to the conclusion that the query cannot be answered
-because the data is incomplete. Your answer will run on the complete dataframe.
-Your task it to write one or more python pandas instructions on this dataframe to answer the user query.
+    def translate_query(
+        self, query: str, previous_pandas: str = None, previous_error: str = None
+    ) -> str:
+        # df_head = re.sub(r"\s+", " ", str(self.df.head(n=3)))
+        #         prompt = f"""df.head(n=3): ```{df_head}``` query: ```{query}```
+        #         NB! the data above is an example so you know the format. Do not come to the conclusion that the query cannot be answered
+        # because the data is incomplete. Your answer will run on the complete dataframe.
+        # Your task it to write one or more python pandas instructions on this dataframe to answer the user query.
+        # Think step by step how to massage the dataframe to match the user query.
+        # Return one or more python code lines with pandas dataframe operations to answer the query and assign the result to the 'result' variable.
+        # The result of the code must be a pandas dataframe, not a list or numpy array.
+        # """.replace(
+        #             "\n", " "
+        #         )
+
+        df_summary = re.sub(r"\s+", " ", str(table_summary(self.df)))
+        previous_stuff = (
+            f"""Your previous query was: ```{previous_pandas}``` and it failed with the error: ```{previous_error}```."""
+            if previous_pandas and previous_error
+            else ""
+        )
+        prompt = f"""Given a df with column statistics and top 5 most common values ```{df_summary}```
+Your task it to write one or more python pandas instructions on this dataframe to answer this user query
+```{query}```
+{previous_stuff}
 Think step by step how to massage the dataframe to match the user query.
+Beware of constant values for categorical columns. Do all string comparisons case insensitive.
+Also try to best guess which existing categories the user is referring to. For instance if the user says 'kippen' and the table has 'pluimvee'.
+Do not use the 'print' or 'write' functions in your code.
 Return one or more python code lines with pandas dataframe operations to answer the query and assign the result to the 'result' variable.
-The result of the code must be a pandas dataframe, not a list or numpy array.
 """.replace(
             "\n", " "
         )
+
         print(prompt)
         messages = [
             {
@@ -266,34 +324,50 @@ Make the best possible assumption mapping the query to the columns.""".replace(
         return self.get_code_from_completion(response)
 
     def query(self, query: str) -> (str, pd.DataFrame):
-        pandas_query = self.translate_query(query)
-
-        # Define the restricted environment
+        max_retries = 3
+        retries = 0
+        result = None
+        previous_pandas = None
+        previous_error = None
         local_vars = {"result": None}
-        global_vars = {
-            "__builtins__": {
-                "getattr": getattr,
-                "len": len,
-                "range": range,
-                "int": int,
-                "float": float,
-                "str": str,
-            },
-            "_getattr_": default_guarded_getattr,
-            "_getiter_": default_guarded_getiter,
-            "_getitem_": default_guarded_getitem,
-            "_iter_unpack_sequence_": guarded_iter_unpack_sequence,
-            "_unpack_sequence_": guarded_unpack_sequence,
-            "pd": pd,
-            "df": self.df,
-        }
 
-        # Compile and execute the restricted code
-        compiled_code = compile_restricted(pandas_query, "<string>", "exec")
-        exec(compiled_code, global_vars, local_vars)
+        while retries < max_retries and local_vars["result"] is None:
+            pandas_query = self.translate_query(query, previous_pandas, previous_error)
+            # Define the restricted environment
+            global_vars = {
+                "__builtins__": {
+                    "getattr": getattr,
+                    "len": len,
+                    "range": range,
+                    "int": int,
+                    "float": float,
+                    "str": str,
+                },
+                "_getattr_": default_guarded_getattr,
+                "_getiter_": default_guarded_getiter,
+                "_getitem_": default_guarded_getitem,
+                "_iter_unpack_sequence_": guarded_iter_unpack_sequence,
+                "_unpack_sequence_": guarded_unpack_sequence,
+                "pd": pd,
+                "df": self.df,
+            }
 
-        print(pandas_query)
-        result: pd.DataFrame = local_vars["result"]
+            # Compile and execute the restricted code
+            compiled_code = compile_restricted(pandas_query, "<string>", "exec")
+            try:
+                logger.info(f"Executing query: {pandas_query}")
+                exec(compiled_code, global_vars, local_vars)
+            except Exception as e:
+                retries += 1
+                if retries < max_retries:
+                    logger.info(f"Error n. {retries}: {str(e)} -- Retrying...")
+                    previous_pandas = pandas_query
+                    previous_error = str(e)
+                else:
+                    logger.error(f"Error: {str(e)}")
+                    return pandas_query, pd.DataFrame()
+
+        result = local_vars["result"]
 
         if isinstance(result, Index):
             result = pd.DataFrame(result)
@@ -304,6 +378,14 @@ Make the best possible assumption mapping the query to the columns.""".replace(
         elif isinstance(result, list):
             result = pd.DataFrame(result)
         elif isinstance(result, int):
+            result = pd.DataFrame([result])
+        elif isinstance(result, np.float64):
+            result = pd.DataFrame([result])
+        elif isinstance(result, float):
+            result = pd.DataFrame([result])
+        elif isinstance(result, str):
+            result = pd.DataFrame([result])
+        elif isinstance(result, bool):
             result = pd.DataFrame([result])
 
         max_rows = 200 // len(result.columns) if len(result.columns) > 0 else 200
