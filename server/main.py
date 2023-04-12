@@ -4,9 +4,9 @@ from io import StringIO
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import Body, Depends, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import JSONResponse
 
 from models.api import (
     FilteredTableListRequest,
@@ -15,8 +15,8 @@ from models.api import (
     TableDataQueryRequest,
     TableDataQueryResponse,
     TableInfo,
-    TableMetadataResponse,
     TableInfoWithScore,
+    TableMetadataResponse,
 )
 from server.logging import log_requests
 from server.table import TableQuerier, TableSearcher, get_table_data
@@ -34,19 +34,18 @@ def validate_token(credentials: HTTPAuthorizationCredentials = Depends(bearer_sc
     return credentials
 
 
-class CustomHTTPException(HTTPException):
-    def __init__(self, status_code: int, detail: str):
-        super().__init__(status_code=status_code, detail=detail)
-
-
-async def custom_http_exception_handler(request: Request, exc: CustomHTTPException):
-    print(exc.status_code, exc.detail)
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+class AppExceptionHandlerMiddleware:
+    async def __call__(self, request: Request, call_next):
+        try:
+            response = await call_next(request)
+            return response
+        except Exception as e:
+            return JSONResponse(status_code=510, content={"detail": str(e)})
 
 
 app = FastAPI(dependencies=[Depends(validate_token)])
-app.add_exception_handler(CustomHTTPException, custom_http_exception_handler)
 app.middleware("http")(log_requests)
+app.middleware("http")(AppExceptionHandlerMiddleware())
 app.mount("/.well-known", StaticFiles(directory=".well-known"), name="static")
 
 # Create a sub-application, in order to access just the query endpoint in an OpenAPI schema,
@@ -60,18 +59,15 @@ sub_app = FastAPI(
 )
 app.mount("/sub", sub_app)
 
+
 table_searcher = TableSearcher()
 
 
 async def handle_filtered_table_list(request: FilteredTableListRequest):
-    try:
-        filtered_tables = [
-            TableInfoWithScore(**table) for table in table_searcher(request.query)
-        ]
-        return FilteredTableListResponse(filtered_tables=filtered_tables)
-    except Exception as e:
-        error_message = str(e)
-        raise CustomHTTPException(status_code=510, detail=error_message)
+    filtered_tables = [
+        TableInfoWithScore(**table) for table in table_searcher(request.query)
+    ]
+    return FilteredTableListResponse(filtered_tables=filtered_tables)
 
 
 @app.post("/filtered_table_list", response_model=FilteredTableListResponse)
@@ -95,21 +91,17 @@ async def filtered_table_list(request: FilteredTableListRequest = Body(...)):
 
 
 async def handle_table_metadata(table_id: str) -> TableMetadataResponse:
-    try:
-        df = get_table_data(table_id)
-        column_info = [
-            TableColumnInfo(column_name=col, column_type=str(df[col].dtype))
-            for col in df.columns
-        ]
-        csv_buffer = StringIO()
-        df.head(5).to_csv(csv_buffer, index=False)
-        example_data = csv_buffer.getvalue()
-        return TableMetadataResponse(
-            table_id=table_id, column_info=column_info, example_data=example_data
-        )
-    except Exception as e:
-        error_message = str(e)
-        raise CustomHTTPException(status_code=510, detail=error_message)
+    df = get_table_data(table_id)
+    column_info = [
+        TableColumnInfo(column_name=col, column_type=str(df[col].dtype))
+        for col in df.columns
+    ]
+    csv_buffer = StringIO()
+    df.head(5).to_csv(csv_buffer, index=False)
+    example_data = csv_buffer.getvalue()
+    return TableMetadataResponse(
+        table_id=table_id, column_info=column_info, example_data=example_data
+    )
 
 
 @app.post(
@@ -134,17 +126,13 @@ async def table_metadata(table_id: str):
 
 
 async def handle_query_table_data(request: TableDataQueryRequest):
-    try:
-        df = get_table_data(request.table_id)
-        table_querier = TableQuerier(df)
-        pandas_query, result_df = table_querier.query(request.natural_language_query)
-        csv_buffer = StringIO()
-        result_df.to_csv(csv_buffer, index=False)
-        data = csv_buffer.getvalue()
-        return TableDataQueryResponse(processed_query=pandas_query, data=data)
-    except Exception as e:
-        error_message = str(e)
-        raise CustomHTTPException(status_code=510, detail=error_message)
+    df = get_table_data(request.table_id)
+    table_querier = TableQuerier(df)
+    pandas_query, result_df = table_querier.query(request.natural_language_query)
+    csv_buffer = StringIO()
+    result_df.to_csv(csv_buffer, index=False)
+    data = csv_buffer.getvalue()
+    return TableDataQueryResponse(processed_query=pandas_query, data=data)
 
 
 @app.post(
