@@ -1,3 +1,5 @@
+![Air quality example](air_quality_example.png)
+
 ## Installation
 
 Setup virtual environment
@@ -13,20 +15,23 @@ Start server
 This will start the server on `localhost:8123`. Use nginx and e.g. letsencrypt to make it available on the internet
 so that the OpenAI plugin runner can access it on https://yourdomain.com/
 
+## Code layout
+
+* The main fastapi and table-query logic resides in `./server`. The `table*` files take care of data handling and querying.
 
 ## CBS opendata
 
-Querying CBS opendata involves two main activities
+Querying CBS opendata is enabled through three endpoints.
 
 1. **Table List Retrieval**: Getting the table-list and finding the correct table (dataframe) to query.
    The metadata of a table includes an identifier and a summary. The summary is embedded with ada,
    so we can search for matching keywords in the summary to find the correct table.
 
-2. **Table Record Format**: Getting the record format of the table (dataframe) and the column names. The table is fetched and
-   column names as well as summary data are extracted from the table. With this information returned by the
-   plugin, the OpenAI plugin runner can hopefully aid the user in answering questions like 'what kind of
-   questions can I answer with this table?' or 'what kind of data is in this table?' and formulate a good
-   natural language query based on the user query.
+2. **Table Record Format**: Getting the record format of the table (dataframe) and the column names.
+   The table is fetched and column names as well as summary data are extracted from the table.
+   With this information returned by the  plugin, the OpenAI plugin runner can hopefully aid the user
+   in answering questions like 'what kind of questions can I answer with this table?' or
+   'what kind of data is in this table?' and formulate a good natural language query based on the user query.
 
 3. **Table Querying**: Querying the table (dataframe) with a table identifier and natural language query string. GPT is asked
    to translate the query into one or more pandas operations. The resulting code is then executed in a
