@@ -1,7 +1,7 @@
 import os
+import traceback
 
 import uvicorn
-import traceback
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -55,4 +55,4 @@ app.mount("/sub", sub_app)
 
 
 def start():
-    uvicorn.run("server.main:app", host="0.0.0.0", port=8123, reload=True)
+    uvicorn.run("server.main:app", host="127.0.0.1", port=8123, reload=True)

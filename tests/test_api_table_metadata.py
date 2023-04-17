@@ -1,6 +1,8 @@
-from fastapi.testclient import TestClient
-from server.main import BEARER_TOKEN, app
 from typing import List
+
+from fastapi.testclient import TestClient
+
+from server.main import BEARER_TOKEN, app
 
 client = TestClient(app)
 

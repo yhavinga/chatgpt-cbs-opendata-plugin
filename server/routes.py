@@ -1,23 +1,20 @@
-from io import StringIO
 import re
+from io import StringIO
 
 import uvicorn
-from fastapi import Body, APIRouter
+from fastapi import APIRouter, Body
 
-from models.api import (
-    FilteredTableListRequest,
-    FilteredTableListResponse,
-    TableColumnInfo,
-    TableDataQueryRequest,
-    TableDataQueryResponse,
-    TableInfoWithScore,
-    TableMetadataResponse,
-)
-from server.table import TableQuerier, TableSearcher, get_table_data, table_summary
+from models.api import (FilteredTableListRequest, FilteredTableListResponse,
+                        TableColumnInfo, TableDataQueryRequest,
+                        TableDataQueryResponse, TableInfoWithScore,
+                        TableMetadataResponse)
+from server.table import get_table_data, table_summary
+from server.table_list import CBSTableEmbedder, CBSTableSearcher
+from server.table_querier import CBSTableQuerier
 
 router = APIRouter()
 sub_router = APIRouter()
-table_searcher = TableSearcher()
+table_searcher = CBSTableSearcher(CBSTableEmbedder())
 
 
 async def handle_filtered_table_list(request: FilteredTableListRequest):
@@ -79,7 +76,7 @@ async def table_metadata(table_id: str):
 
 async def handle_query_table_data(request: TableDataQueryRequest):
     df = get_table_data(request.table_id)
-    table_querier = TableQuerier(df)
+    table_querier = CBSTableQuerier(df)
     pandas_query, result_df = table_querier.query(request.natural_language_query)
     csv_buffer = StringIO()
     result_df.to_csv(csv_buffer, index=False)
@@ -96,6 +93,7 @@ async def handle_query_table_data(request: TableDataQueryRequest):
     response_model=TableDataQueryResponse,
     description="""Accepts a CBS opendata table identifier and a natural language query on this table.
 Table identifiers and dataset time periods can be found with /filtered_table_list endpoint.
+Break down complex questions into sub-questions.
 Split queries if ResponseTooLargeError occurs.""".replace(
         "\n", " "
     ),

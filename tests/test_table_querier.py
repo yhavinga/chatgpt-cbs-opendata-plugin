@@ -1,10 +1,7 @@
-import re
-
 import pandas as pd
 import pytest
 
-from server.table import TableQuerier
-from services.openai import get_chat_completion
+from server.table_querier import CBSTableQuerier
 
 
 @pytest.fixture
@@ -14,10 +11,11 @@ def table_querier():
     df = pd.DataFrame(data)
 
     # Initialize the TableQuerier with the sample DataFrame
-    return TableQuerier(df)
+    return CBSTableQuerier(df)
 
 
-def test_table_querier_execute(table_querier, mock_openai):
+# def test_table_querier_execute(table_querier, mock_openai):
+def test_table_querier_execute(table_querier):
     # Test the translate_query method
     query = "Filter rows where column1 is greater than 50"
     pandas_expression = table_querier.translate_query(query)
